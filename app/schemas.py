@@ -3,25 +3,27 @@ from typing import Optional
 from datetime import datetime
 
 class UserBase(BaseModel):
-    email: EmailStr
-    full_name: Optional[str] = None
+    emailId: EmailStr
+    fullName: Optional[str] = None
+    phoneNumber: Optional[str] = None
 
 class UserCreate(UserBase):
     password: str
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
-    full_name: Optional[str] = None
+    emailId: Optional[EmailStr] = None
+    fullName: Optional[str] = None
+    phoneNumber: Optional[str] = None
     password: Optional[str] = None
 
 class UserLogin(BaseModel):
-    email: EmailStr
+    emailId: EmailStr
     password: str
 
 class UserResponse(UserBase):
-    id: int
-    is_active: bool
-    created_at: datetime
+    userId: int
+    isActive: bool
+    createdOn: datetime
     
     class Config:
         from_attributes = True
@@ -31,4 +33,34 @@ class Token(BaseModel):
     token_type: str
 
 class TokenData(BaseModel):
-    email: Optional[str] = None
+    emailId: Optional[str] = None
+
+class RoleBase(BaseModel):
+    roleName: str
+
+class RoleCreate(RoleBase):
+    pass
+
+class RoleResponse(RoleBase):
+    roleId: int
+    
+    class Config:
+        from_attributes = True
+
+class UserRoleBase(BaseModel):
+    userId: int
+    roleId: int
+
+class UserRoleResponse(UserRoleBase):
+    userRoleId: int
+
+    class Config:
+        from_attributes = True
+
+class ForgotPassword(BaseModel):
+    emailId: EmailStr
+
+class ResetPassword(BaseModel):
+    emailId: EmailStr
+    currentPassword: str
+    newPassword: str

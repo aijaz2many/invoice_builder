@@ -22,11 +22,11 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: An
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
-        token_data = TokenData(email=email)
+        token_data = TokenData(emailId=email)
     except JWTError:
         raise credentials_exception
     
-    result = await db.execute(select(User).where(User.email == token_data.email))
+    result = await db.execute(select(User).where(User.emailId == token_data.emailId))
     user = result.scalars().first()
     if user is None:
         raise credentials_exception

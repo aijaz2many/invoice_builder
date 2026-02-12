@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from .core.database import engine, Base
-from .routers import auth, users
+from .routers import auth, users, roles, user_roles
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -15,6 +15,8 @@ app = FastAPI(lifespan=lifespan)
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(roles.router)
+app.include_router(user_roles.router)
 
 @app.get("/")
 async def root():

@@ -11,20 +11,22 @@ To register a new user, send a POST request to `/auth/signup`.
 **Request Body:**
 ```json
 {
-  "email": "user@example.com",
+  "emailId": "user@example.com",
   "password": "yourpassword",
-  "full_name": "Your Name"
+  "fullName": "Your Name",
+  "phoneNumber": "1234567890"
 }
 ```
 
 **Response:**
 ```json
 {
-  "email": "user@example.com",
-  "full_name": "Your Name",
-  "id": 1,
-  "is_active": true,
-  "created_at": "2024-02-08T12:00:00.000000Z"
+  "emailId": "user@example.com",
+  "fullName": "Your Name",
+  "phoneNumber": "1234567890",
+  "userId": 1,
+  "isActive": true,
+  "createdOn": "2024-02-08T12:00:00.000000Z"
 }
 ```
 
@@ -35,7 +37,7 @@ To log in and obtain an access token, send a POST request to `/auth/token`. Note
 **Content-Type:** `application/x-www-form-urlencoded`
 
 **Form Data:**
-*   `username`: Your email address (e.g., `user@example.com`)
+*   `username`: Your email address (mapped to `emailId`)
 *   `password`: Your password
 
 **Example using `curl`:**
@@ -76,4 +78,28 @@ headers = {
 
 response = requests.get(url, headers=headers)
 print(response.json())
+```
+
+## 4. Forgot Password
+If you forget your password, you can reset it to the default `12345678`.
+
+**Endpoint:** `POST http://127.0.0.1:8000/auth/forgot-password`
+**Request Body:**
+```json
+{
+  "emailId": "user@example.com"
+}
+```
+
+## 5. Reset Default Password
+If your password is the default `12345678`, login will be blocked. You must change it using this endpoint.
+
+**Endpoint:** `POST http://127.0.0.1:8000/auth/reset-password`
+**Request Body:**
+```json
+{
+  "emailId": "user@example.com",
+  "currentPassword": "12345678",
+  "newPassword": "your-new-secure-password"
+}
 ```
