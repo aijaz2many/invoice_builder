@@ -64,3 +64,45 @@ class ResetPassword(BaseModel):
     emailId: EmailStr
     currentPassword: str
     newPassword: str
+
+# Business Type Schemas
+class BusinessTypeBase(BaseModel):
+    businessTypeName: str
+    isActive: bool = True
+
+class BusinessTypeCreate(BusinessTypeBase):
+    pass
+
+class BusinessTypeResponse(BusinessTypeBase):
+    businessTypeId: int
+    createdOn: datetime
+    
+    class Config:
+        from_attributes = True
+
+# Business Schemas
+class BusinessBase(BaseModel):
+    businessName: str
+    businessTypeId: int
+    userId: int
+    businessLogo: Optional[str] = None
+    businessAddress: Optional[str] = None
+    businessCity: Optional[str] = None
+    businessState: Optional[str] = None
+    businessCountry: Optional[str] = None
+    businessZip: Optional[str] = None
+    businessPhone: Optional[str] = None
+    businessEmail: Optional[str] = None
+    businessWebsite: Optional[str] = None
+    isActive: bool = True
+
+class BusinessCreate(BusinessBase):
+    pass
+
+class BusinessResponse(BusinessBase):
+    businessId: int
+    createdOn: datetime
+    lastLoginOn: datetime
+    
+    class Config:
+        from_attributes = True
