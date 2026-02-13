@@ -106,3 +106,156 @@ class BusinessResponse(BusinessBase):
     
     class Config:
         from_attributes = True
+
+# Customer Schemas
+class CustomerBase(BaseModel):
+    businessId: int
+    customerName: str
+    customerPhone: str
+    customerFullAddress: str
+
+class CustomerCreate(CustomerBase):
+    pass
+
+class CustomerResponse(CustomerBase):
+    customerId: int
+    createdOn: datetime
+    
+    class Config:
+        from_attributes = True
+
+# Invoice Schemas
+class InvoiceBase(BaseModel):
+    businessId: int
+    customerId: int
+    invoiceNumber: str
+    invoiceAmount: int
+    amountInWords: str
+    paymentMode: str
+    paymentType: str
+    purpose: str
+    pdfURL: Optional[str] = None
+
+class InvoiceCreate(InvoiceBase):
+    pass
+
+class InvoiceResponse(InvoiceBase):
+    invoiceId: int
+    invoiceDate: datetime
+    createdOn: datetime
+    
+    class Config:
+        from_attributes = True
+
+class InvoiceWithCustomerCreate(BaseModel):
+    businessId: int
+    invoiceNumber: str
+    invoiceAmount: int
+    amountInWords: str
+    paymentMode: str
+    paymentType: str
+    purpose: str
+    pdfURL: Optional[str] = None
+    
+    customerName: str
+    customerPhone: str
+    customerFullAddress: str
+
+
+# Subscription Plan Schemas
+class SubscriptionPlanBase(BaseModel):
+    subscriptionPlanName: str
+    subscriptionPlanDescription: str
+    subscriptionPlanPrice: int
+    subscriptionPlanDuration: int
+    subscriptionPlanStatus: bool = True
+
+class SubscriptionPlanCreate(SubscriptionPlanBase):
+    pass
+
+class SubscriptionPlanUpdate(BaseModel):
+    subscriptionPlanName: Optional[str] = None
+    subscriptionPlanDescription: Optional[str] = None
+    subscriptionPlanPrice: Optional[int] = None
+    subscriptionPlanDuration: Optional[int] = None
+    subscriptionPlanStatus: Optional[bool] = None
+
+class SubscriptionPlanResponse(SubscriptionPlanBase):
+    subscriptionPlanId: int
+    createdOn: datetime
+
+    class Config:
+        from_attributes = True
+
+# Subscription Schemas
+class SubscriptionBase(BaseModel):
+    businessId: int
+    subscriptionPlanId: int
+    subscriptionStatus: bool = True
+    subscriptionStartDate: datetime
+    subscriptionEndDate: datetime
+    autoRenew: bool = True
+
+class SubscriptionCreate(SubscriptionBase):
+    pass
+
+class SubscriptionUpdate(BaseModel):
+    subscriptionPlanId: Optional[int] = None
+    subscriptionStatus: Optional[bool] = None
+    subscriptionStartDate: Optional[datetime] = None
+    subscriptionEndDate: Optional[datetime] = None
+    autoRenew: Optional[bool] = None
+
+class SubscriptionResponse(SubscriptionBase):
+    subscriptionId: int
+    createdOn: datetime
+
+    class Config:
+        from_attributes = True
+
+# Subscription Payment Schemas
+class SubscriptionPaymentBase(BaseModel):
+    subscriptionId: int
+    paymentStatus: bool = True
+    paymentDate: datetime
+    paymentAmount: int
+    paymentMode: str
+    paymentType: str
+    paymentPurpose: str
+
+class SubscriptionPaymentCreate(SubscriptionPaymentBase):
+    pass
+
+class SubscriptionPaymentUpdate(BaseModel):
+    paymentStatus: Optional[bool] = None
+    paymentDate: Optional[datetime] = None
+    paymentAmount: Optional[int] = None
+    paymentMode: Optional[str] = None
+    paymentType: Optional[str] = None
+    paymentPurpose: Optional[str] = None
+
+class SubscriptionPaymentResponse(SubscriptionPaymentBase):
+    subscriptionPaymentId: int
+    createdOn: datetime
+
+    class Config:
+        from_attributes = True
+
+# Subscription Usage Schemas
+class SubscriptionUsageBase(BaseModel):
+    subscriptionId: int
+    usageMonth: str # YYYY-MM
+    invoiceCount: int
+
+class SubscriptionUsageCreate(SubscriptionUsageBase):
+    pass
+
+class SubscriptionUsageUpdate(BaseModel):
+    invoiceCount: Optional[int] = None
+
+class SubscriptionUsageResponse(SubscriptionUsageBase):
+    subscriptionUsageId: int
+    createdOn: datetime
+
+    class Config:
+        from_attributes = True
