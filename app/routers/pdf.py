@@ -1,7 +1,7 @@
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Response
 import os
 import fitz # PyMuPDF
+import httpx
 from .. import schemas, models, deps
 from ..core import database
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,12 +10,34 @@ import io
 
 router = APIRouter(prefix="/pdf", tags=["PDF"])
 
-# Ensure temp directory exists for generated PDFs
-TEMP_DIR = "app/storage/temp"
-if not os.path.exists(TEMP_DIR):
-    os.makedirs(TEMP_DIR)
+OCI_PAR_URL = "https://objectstorage.ap-mumbai-1.oraclecloud.com/p/IBDUyhhzwHNkcqt2_NvHqebRPyaN2tVfZuaqKpilDa0foleXa2TAU2xaiukX3NTB/n/bm3luqkdqbty/b/testing/o/"
 
-TEMPLATE_PATH = "app/storage/1/receipt_fields.pdf"
+@router.post("/upload-template/{businessId}")
+async def upload_template(
+    businessId: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    # 1. Verify business exists
+    business_result = await db.execute(select(models.Business).where(models.Business.businessId == businessId))
+    if not business_result.scalars().first():
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    # 2. Upload to Oracle Object Storage (Sync)
+    try:
+        file_content = await file.read()
+        oci_upload_url = f"{OCI_PAR_URL}{businessId}/receipt_fields.pdf"
+        async with httpx.AsyncClient() as client:
+            response = await client.put(oci_upload_url, content=file_content)
+            if response.status_code not in [200, 201]:
+                print(f"OCI Upload Failed: {response.status_code} - {response.text}")
+                raise HTTPException(status_code=500, detail="Failed to upload template to Cloud Storage")
+    except Exception as e:
+        print(f"OCI Upload Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Cloud Storage upload error: {str(e)}")
+
+    return {"message": "Template uploaded successfully to Cloud Storage", "status": "success"}
 
 @router.post("/generate-invoice")
 async def generate_invoice_pdf(
@@ -50,6 +72,11 @@ async def generate_invoice_pdf(
         await db.commit()
         await db.refresh(customer)
 
+    # Define cloud storage path for the generated invoice
+    safe_date = data.invoiceDate.replace("/", "-").replace("\\", "-")
+    invoice_filename = f"invoice_{data.invoiceNumber}_{safe_date}.pdf"
+    cloud_invoice_url = f"{OCI_PAR_URL}{data.businessId}/invoices/{invoice_filename}"
+
     # Save Invoice
     new_invoice = models.Invoice(
         businessId=data.businessId,
@@ -63,18 +90,28 @@ async def generate_invoice_pdf(
         purpose=data.purpose,
         billCollector=data.billCollector,
         Nazim=data.Nazim,
-        pdfURL=f"/storage/temp/invoice_{data.invoiceNumber}.pdf" # Setting local path as URL for now
+        pdfURL=cloud_invoice_url
     )
     db.add(new_invoice)
     await db.commit()
     await db.refresh(new_invoice)
 
     # 2. PDF Generation
-    if not os.path.exists(TEMPLATE_PATH):
-        raise HTTPException(status_code=404, detail="Template not found")
+    # Fetch template directly from OCI into memory
+    try:
+        oci_download_url = f"{OCI_PAR_URL}{data.businessId}/receipt_fields.pdf"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(oci_download_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=404, detail=f"Template not found on Cloud Storage for business {data.businessId}")
+            template_content = response.content
+    except Exception as e:
+        if isinstance(e, HTTPException): raise e
+        raise HTTPException(status_code=500, detail=f"Error fetching template from Cloud: {str(e)}")
     
     try:
-        doc = fitz.open(TEMPLATE_PATH)
+        # Open PDF from memory stream
+        doc = fitz.open(stream=template_content, filetype="pdf")
         page = doc.load_page(0)
         
         # Map pydantic data to a dictionary
@@ -90,7 +127,6 @@ async def generate_invoice_pdf(
                 rect = widget.rect
                 
                 # Insert text directly onto the page at the widget's location
-                # Point(x, y) where y is the baseline of the text
                 point = (rect.x0, rect.y1 - 3)
                 
                 page.insert_text(
@@ -104,21 +140,27 @@ async def generate_invoice_pdf(
             # Delete the widget so the box is gone
             page.delete_widget(widget)
         
-        # Ensure temp directory exists
-        if not os.path.exists(TEMP_DIR):
-            os.makedirs(TEMP_DIR)
-            
-        output_filename = f"invoice_{data.invoiceNumber}.pdf"
-        output_path = os.path.join(TEMP_DIR, output_filename)
-        
-        # Save the modified PDF
-        doc.save(output_path)
+        # Get the final PDF content in memory
+        pdf_bytes = doc.write()
         doc.close()
-            
-        return FileResponse(
-            output_path, 
-            media_type="application/pdf", 
-            filename=output_filename
+
+        # 3. Upload generated invoice to Cloud Storage
+        try:
+            async with httpx.AsyncClient() as client:
+                upload_response = await client.put(cloud_invoice_url, content=pdf_bytes)
+                if upload_response.status_code not in [200, 201]:
+                    print(f"Cloud Invoice Upload Failed: {upload_response.status_code} - {upload_response.text}")
+                    # We don't fail the whole request because the DB is already updated and PDF is ready to return
+        except Exception as e:
+            print(f"Cloud Invoice Upload Error: {str(e)}")
+
+        # Return the PDF directly from memory
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f"attachment; filename={invoice_filename}"
+            }
         )
         
     except Exception as e:
