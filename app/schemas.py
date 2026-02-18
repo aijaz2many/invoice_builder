@@ -259,3 +259,19 @@ class SubscriptionUsageResponse(SubscriptionUsageBase):
 
     class Config:
         from_attributes = True
+
+class InvoicePDFData(BaseModel):
+    businessId: int
+    invoiceNumber: str
+    BookNo: str
+    invoiceDate: str
+    CustomerName: str
+    amountinwords: str
+    invoiceAmount: int
+    purpose: str
+    billCollector: str
+    Nazim: str
+    customerFullAddress: str
+    customerPhone: str
+    paymentMode: str
+    paymentType: str

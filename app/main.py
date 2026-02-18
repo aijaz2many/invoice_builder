@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.database import engine, Base
-from .routers import auth, users, roles, user_roles, business_types, businesses, customers, invoices, subscriptions
+from .routers import auth, users, roles, user_roles, business_types, businesses, customers, invoices, subscriptions, pdf
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.include_router(businesses.router)
 app.include_router(customers.router)
 app.include_router(invoices.router)
 app.include_router(subscriptions.router)
+app.include_router(pdf.router)
 
 @app.get("/")
 async def root():
