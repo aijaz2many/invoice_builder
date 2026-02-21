@@ -7,6 +7,7 @@ from ..core import database
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import io
+from typing import List
 
 router = APIRouter(prefix="/pdf", tags=["PDF"])
 
@@ -21,23 +22,95 @@ async def upload_template(
 ):
     # 1. Verify business exists
     business_result = await db.execute(select(models.Business).where(models.Business.businessId == businessId))
-    if not business_result.scalars().first():
+    business = business_result.scalars().first()
+    if not business:
         raise HTTPException(status_code=404, detail="Business not found")
 
-    # 2. Upload to Oracle Object Storage (Sync)
+    file_ext = file.filename.split('.')[-1].lower()
+    is_pdf = file_ext == 'pdf'
+    is_image = file_ext in ['jpg', 'jpeg', 'png']
+
+    if not is_pdf and not is_image:
+        raise HTTPException(status_code=400, detail="Only PDF or Image (JPG, PNG) files are allowed")
+
+    # 2. Upload to Oracle Object Storage
     try:
         file_content = await file.read()
-        oci_upload_url = f"{OCI_PAR_URL}{businessId}/receipt_fields.pdf"
+        filename = "receipt_fields.pdf" if is_pdf else f"raw_template.{file_ext}"
+        oci_upload_url = f"{OCI_PAR_URL}{businessId}/{filename}"
+        
         async with httpx.AsyncClient() as client:
             response = await client.put(oci_upload_url, content=file_content)
             if response.status_code not in [200, 201]:
                 print(f"OCI Upload Failed: {response.status_code} - {response.text}")
-                raise HTTPException(status_code=500, detail="Failed to upload template to Cloud Storage")
-    except Exception as e:
-        print(f"OCI Upload Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Cloud Storage upload error: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to upload to Cloud Storage")
+        
+        # 3. Update Business Status
+        business.templateStatus = "ACTIVE" if is_pdf else "PENDING"
+        await db.commit()
 
-    return {"message": "Template uploaded successfully to Cloud Storage", "status": "success"}
+    except Exception as e:
+        print(f"Upload Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload error: {str(e)}")
+
+    return {
+        "message": "Template uploaded successfully", 
+        "status": "success",
+        "templateStatus": business.templateStatus
+    }
+
+@router.get("/template/{businessId}")
+async def get_template(
+    businessId: int,
+    db: AsyncSession = Depends(database.get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    # 1. Verify business exists and check status
+    business_result = await db.execute(select(models.Business).where(models.Business.businessId == businessId))
+    business = business_result.scalars().first()
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    if business.templateStatus == "MISSING":
+        raise HTTPException(status_code=404, detail="No template has been uploaded for this business yet")
+
+    # 2. Determine filename and media type based on status
+    target_filename = "receipt_fields.pdf"
+    media_type = "application/pdf"
+    
+    if business.templateStatus == "PENDING":
+        # Try to find the raw image. We'll check common extensions.
+        # Note: In a production environment, you might store the exact extension in the DB.
+        found = False
+        for ext in ["jpg", "jpeg", "png"]:
+            oci_check_url = f"{OCI_PAR_URL}{businessId}/raw_template.{ext}"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(oci_check_url)
+                if response.status_code == 200:
+                    target_filename = f"raw_template.{ext}"
+                    media_type = f"image/{ext if ext != 'jpg' else 'jpeg'}"
+                    content = response.content
+                    found = True
+                    break
+        if not found:
+            raise HTTPException(status_code=404, detail="Pending template file not found on Cloud Storage")
+    else:
+        # ACTIVE status
+        oci_download_url = f"{OCI_PAR_URL}{businessId}/{target_filename}"
+        async with httpx.AsyncClient() as client:
+            response = await client.get(oci_download_url)
+            if response.status_code != 200:
+                raise HTTPException(status_code=404, detail=f"Active template PDF not found on Cloud Storage")
+            content = response.content
+
+    # 3. Return the file
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"inline; filename={target_filename}"
+        }
+    )
 
 @router.post("/generate-invoice")
 async def generate_invoice_pdf(
@@ -48,8 +121,13 @@ async def generate_invoice_pdf(
     # 1. Database Operations
     # Verify business exists
     business_result = await db.execute(select(models.Business).where(models.Business.businessId == data.businessId))
-    if not business_result.scalars().first():
+    business = business_result.scalars().first()
+    if not business:
         raise HTTPException(status_code=404, detail="Business not found")
+    
+    # Check template status
+    if business.templateStatus != "ACTIVE":
+         raise HTTPException(status_code=400, detail="Business template is not active. Please wait for admin approval if you uploaded an image.")
 
     # Handle Customer (Find or Create)
     customer_query = await db.execute(
@@ -150,7 +228,6 @@ async def generate_invoice_pdf(
                 upload_response = await client.put(cloud_invoice_url, content=pdf_bytes)
                 if upload_response.status_code not in [200, 201]:
                     print(f"Cloud Invoice Upload Failed: {upload_response.status_code} - {upload_response.text}")
-                    # We don't fail the whole request because the DB is already updated and PDF is ready to return
         except Exception as e:
             print(f"Cloud Invoice Upload Error: {str(e)}")
 

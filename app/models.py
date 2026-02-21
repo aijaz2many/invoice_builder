@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, UniqueConstraint, Text
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from .core.database import Base
 
 class User(Base):
@@ -14,6 +15,8 @@ class User(Base):
     isActive = Column(Boolean, default=True)
     createdOn = Column(DateTime(timezone=True), server_default=func.now())
     lastLoginOn = Column(DateTime(timezone=True), server_default=func.now())
+    
+    roles = relationship("Role", secondary="epay_user_roles", backref="users", lazy="selectin")
 
 class Role(Base):
     __tablename__ = "epay_roles"
@@ -58,6 +61,7 @@ class Business(Base):
     businessEmail = Column(String, nullable=True)
     businessWebsite = Column(String, nullable=True)
     isActive = Column(Boolean, default=True)
+    templateStatus = Column(String(20), default="MISSING") # MISSING, PENDING, ACTIVE
     createdOn = Column(DateTime(timezone=True), server_default=func.now())
     lastLoginOn = Column(DateTime(timezone=True), server_default=func.now())
 

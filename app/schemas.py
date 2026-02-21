@@ -1,5 +1,6 @@
+from __future__ import annotations
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 class UserBase(BaseModel):
@@ -24,6 +25,7 @@ class UserResponse(UserBase):
     userId: int
     isActive: bool
     createdOn: datetime
+    roles: List[RoleResponse] = []
     
     class Config:
         from_attributes = True
@@ -95,6 +97,7 @@ class BusinessBase(BaseModel):
     businessEmail: Optional[str] = None
     businessWebsite: Optional[str] = None
     isActive: bool = True
+    templateStatus: Optional[str] = "MISSING"
 
 class BusinessCreate(BusinessBase):
     pass
@@ -275,3 +278,10 @@ class InvoicePDFData(BaseModel):
     customerPhone: str
     paymentMode: str
     paymentType: str
+
+class DashboardStats(BaseModel):
+    totalBusinesses: int
+    totalInvoices: int
+    pendingTemplates: int
+    missingTemplates: int
+    totalUsers: int

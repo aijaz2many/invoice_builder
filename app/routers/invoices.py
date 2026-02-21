@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List
+import httpx
 from .. import schemas, models, deps
 from ..core.database import get_db
 
@@ -89,6 +90,17 @@ async def get_business_invoices(
     result = await db.execute(select(models.Invoice).where(models.Invoice.businessId == business_id))
     return result.scalars().all()
 
+@router.get("/user/{user_id}", response_model=List[schemas.InvoiceResponse])
+async def get_user_invoices(
+    user_id: int, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    # Join with Business table to filter invoices by user
+    query = select(models.Invoice).join(models.Business).where(models.Business.userId == user_id)
+    result = await db.execute(query)
+    return result.scalars().all()
+
 @router.put("/{invoice_id}", response_model=schemas.InvoiceResponse)
 async def update_invoice(
     invoice_id: int,
@@ -119,6 +131,17 @@ async def delete_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
+    # Delete from Cloud Storage first if URL exists
+    if invoice.pdfURL:
+        try:
+            async with httpx.AsyncClient() as client:
+                # OCI PAR URLs typically support DELETE if configured correctly
+                del_response = await client.delete(invoice.pdfURL)
+                if del_response.status_code not in [200, 204]:
+                    print(f"Cloud Delete failed for {invoice.pdfURL}: {del_response.status_code}")
+        except Exception as e:
+            print(f"Error deleting from cloud: {str(e)}")
+
     await db.delete(invoice)
     await db.commit()
     return {"message": "Invoice deleted"}

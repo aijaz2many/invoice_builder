@@ -7,6 +7,28 @@ from ..core.database import get_db
 
 router = APIRouter(prefix="/businesses", tags=["Businesses"])
 
+@router.get("/types/", response_model=List[schemas.BusinessTypeResponse])
+async def list_business_types(db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(models.BusinessType).where(models.BusinessType.isActive == True))
+    return result.scalars().all()
+
+@router.post("/types/", response_model=schemas.BusinessTypeResponse)
+async def create_business_type(
+    business_type: schemas.BusinessTypeCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(deps.get_current_user)
+):
+    # Check if exists
+    result = await db.execute(select(models.BusinessType).where(models.BusinessType.businessTypeName == business_type.businessTypeName))
+    if result.scalars().first():
+        raise HTTPException(status_code=400, detail="Business type already exists")
+    
+    new_type = models.BusinessType(**business_type.model_dump())
+    db.add(new_type)
+    await db.commit()
+    await db.refresh(new_type)
+    return new_type
+
 @router.post("/", response_model=schemas.BusinessResponse)
 async def create_business(
     business: schemas.BusinessCreate,
